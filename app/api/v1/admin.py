@@ -787,6 +787,7 @@ async def check_duplicate(
 async def update_translation_status(
     translation_id: int,
     data: TranslationStatusUpdate,
+    current_user: dict = Depends(require_role("admin", "editor")),
     session: AsyncSession = Depends(get_db),
 ):
     result = await session.execute(
