@@ -71,6 +71,8 @@ class SourceCreate(BaseModel):
     url: str | None = None
     version: str | None = None
     page: str | None = None
+    chapter: str | None = None
+    section: str | None = None
     verified_at: datetime | None = None
 
 

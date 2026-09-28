@@ -34,6 +34,15 @@ class Source(Base):
         String(50),
         nullable=True,
     )
+    
+    chapter: Mapped[str | None] = mapped_column(
+    String(200),
+    nullable=True,)
+
+    section: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
 
     verified_at: Mapped[datetime | None] = mapped_column(
     DateTime(timezone=True),

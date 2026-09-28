@@ -676,7 +676,7 @@ async def preview_content_versions(
         .selectinload(Question.source),
     ).where(ContentVersion.id == content_version_id))
     content_version = result.scalar_one_or_none()
-    if content_version_id is None:
+    if content_version is None:
         raise HTTPException(status_code=404, detail="Content version not found")
     errors = validate_content_version(content_version)
     package = build_content_package(
@@ -1571,8 +1571,15 @@ async def create_source(data: SourceCreate,
         require_role("admin", "editor")
     ),
                          session: AsyncSession = Depends(get_db)):
-    source = Source(title=data.title, url=data.url, version=data.version, page=data.page,
-                    verified_at=data.verified_at)
+    source = Source(
+    title=data.title,
+    url=data.url,
+    version=data.version,
+    page=data.page,
+    chapter=data.chapter,
+    section=data.section,
+    verified_at=data.verified_at,
+)
     session.add(source)
     await session.commit()
     await session.refresh(source)
@@ -1612,6 +1619,8 @@ async def update_source(
     source.title = data.title
     source.url = data.url
     source.version = data.version
+    source.chapter = data.chapter
+    source.section = data.section
     source.page = data.page
     source.verified_at = data.verified_at
 
