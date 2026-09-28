@@ -745,6 +745,44 @@ async def check_translations(
     }
 
 
+@router.get("/content-version/{content_version_id}/duplicate-check")
+async def check_duplicate(
+    content_version_id: int,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db)):
+
+    result = await session.execute(select(ContentVersion).options(
+        selectinload(ContentVersion.topics)
+        .selectinload(Topic.lessons)
+        .selectinload(Lesson.questions),
+    ).where(ContentVersion.id == content_version_id))
+    content_version = result.scalar_one_or_none()
+    if content_version is None:
+        raise HTTPException(
+            status_code=404, detail="Content version not found"
+        )
+    content_key_counts: dict[str, int] = {}
+    for topic in content_version.topics:
+        for lesson in topic.lessons:
+            for question in lesson.questions:
+                content_key_counts[question.content_key] = (
+                    content_key_counts.get(question.content_key, 0) + 1
+                )
+    duplicates = [
+        {
+            "content_key": content_key,
+            "count": count,
+        }
+        for content_key, count in content_key_counts.items()
+        if count > 1
+    ]
+    return {
+        "content_version_id": content_version.id,
+        "duplicates": duplicates,
+        "valid": len(duplicates) == 0,
+    }
+
+
 @router.patch("/translations/{translation_id}/status")
 async def update_translation_status(
     translation_id: int,
