@@ -76,6 +76,16 @@ class SourceCreate(BaseModel):
     verified_at: datetime | None = None
 
 
+class SourceUpdate(BaseModel):
+    title: str | None = None
+    url: str | None = None
+    version: str | None = None
+    page: str | None = None
+    chapter: str | None = None
+    section: str | None = None
+    verified_at: datetime | None = None
+
+
 
 class AdminLogin(BaseModel):
     username: str

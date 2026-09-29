@@ -10,6 +10,9 @@ from app.schemas.package import (
     PackageQuestion,
     PackageLesson,
     PackageTopic,
+    PackageExamConfig,
+    PackageOfficialSample,
+    PackageRoadSign,
 )
 
 
@@ -80,6 +83,36 @@ def build_content_package(
             for question in lesson.questions:
                 for translation in question.translations:
                     languages.add(translation.language)
+    exam_config = None
+
+    if content_version.exam_config:
+        exam_config = PackageExamConfig(
+            question_count=content_version.exam_config.question_count,
+            passing_score=content_version.exam_config.passing_score,
+            time_limit_minutes=content_version.exam_config.time_limit_minutes,
+            max_mistakes=content_version.exam_config.max_mistakes,
+            is_active=content_version.exam_config.is_active,
+        )
+
+    road_signs = [
+    PackageRoadSign(
+        id=sign.id,
+        title=sign.title,
+        description=sign.description,
+        image_url=sign.image_url,
+    )
+    for sign in content_version.road_signs
+    ]
+
+    official_samples = [
+        PackageOfficialSample(
+            id=sample.id,
+            title=sample.title,
+            description=sample.description,
+            url=sample.url,
+        )
+        for sample in content_version.official_samples
+    ]
 
     return ContentPackage(
         schema_version=1,
@@ -95,6 +128,9 @@ def build_content_package(
         minimum_app_version=content_version.minimum_app_version,
         published_at=None,
         topics=topics,
+        exam_config=exam_config,
+        road_signs=road_signs,
+        official_samples=official_samples,
     )
 
 

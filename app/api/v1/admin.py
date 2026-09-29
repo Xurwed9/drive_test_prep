@@ -17,7 +17,7 @@ from app.schemas.admin import (
     TranslationCreate,
     SourceCreate,
     AdminLogin,AdminUserCreate,AdminUserUpdate,TopicUpdate,LessonUpdate,
-    QuestionUpdate, QuestionOptionUpdate, TranslationUpdate,
+    QuestionUpdate, QuestionOptionUpdate, TranslationUpdate,SourceUpdate,
 )
 from app.schemas.road_sign import RoadSignCreate, RoadSignUpdate, RoadSignResponse
 from app.models.publication import PublicationAudit
@@ -447,6 +447,9 @@ async def update_content_version_status(
         .selectinload(Topic.lessons)
         .selectinload(Lesson.questions)
         .selectinload(Question.source),
+        selectinload(ContentVersion.exam_config),
+        selectinload(ContentVersion.road_signs),
+        selectinload(ContentVersion.official_samples),
     )
     .where(ContentVersion.id == content_version_id)
 )
@@ -710,6 +713,10 @@ async def preview_content_versions(
         selectinload(ContentVersion.state),
         selectinload(ContentVersion.vehicle),
         selectinload(ContentVersion.module),
+
+        selectinload(ContentVersion.exam_config),
+        selectinload(ContentVersion.road_signs),
+        selectinload(ContentVersion.official_samples),
 
         selectinload(ContentVersion.topics)
         .selectinload(Topic.lessons)
@@ -1654,7 +1661,7 @@ async def get_sources(
 @router.patch("/source/{source_id}")
 async def update_source(
     source_id: int,
-    data: SourceCreate,
+    data: SourceUpdate,
     current_user: dict = Depends(
         require_role("admin", "editor")
     ),
@@ -1668,13 +1675,10 @@ async def update_source(
             detail="Source not found",
         )
 
-    source.title = data.title
-    source.url = data.url
-    source.version = data.version
-    source.chapter = data.chapter
-    source.section = data.section
-    source.page = data.page
-    source.verified_at = data.verified_at
+    update_data = data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(source, field, value)
 
     await session.commit()
     await session.refresh(source)
@@ -2020,7 +2024,7 @@ async def delete_official_sample(
 
 
 @router.post(
-    "exam-config",
+    "/exam-config",
     response_model=ExamConfigResponse,
 )
 async def create_exam_config(

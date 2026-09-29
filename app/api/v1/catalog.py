@@ -20,6 +20,7 @@ async def get_catalog(
     return {
         "states": [
             {
+                "id": state.id,
                 "code": state.code,
                 "name": state.name,
                 "status": state.status,

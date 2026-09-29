@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class StateCatalogItem(BaseModel):
+    id: int
     code: str
     name: str
     status: str

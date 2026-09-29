@@ -44,6 +44,20 @@ class PackageExamConfig(BaseModel):
     is_active: bool
 
 
+class PackageRoadSign(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    image_url: str | None
+
+
+class PackageOfficialSample(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    url: str | None
+
+
 class ContentPackage(BaseModel):
     schema_version: int
 
@@ -63,3 +77,5 @@ class ContentPackage(BaseModel):
     published_at: datetime | None
     topics: list[PackageTopic]
     exam_config: PackageExamConfig | None
+    road_signs: list[PackageRoadSign]
+    official_samples: list[PackageOfficialSample]
