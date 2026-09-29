@@ -19,6 +19,7 @@ from app.schemas.admin import (
     AdminLogin,AdminUserCreate,AdminUserUpdate,TopicUpdate,LessonUpdate,
     QuestionUpdate, QuestionOptionUpdate, TranslationUpdate,
 )
+from app.schemas.road_sign import RoadSignCreate, RoadSignUpdate, RoadSignResponse
 from app.models.publication import PublicationAudit
 from app.models.topic import Topic
 from app.models.lesson import Lesson
@@ -39,6 +40,14 @@ from app.services.content_validator import validate_content_version
 from app.models.state import State
 from app.models.vehicle import Vehicle
 from app.models.module import Module
+from app.models.road_sign import RoadSign
+from app.models.official_sample import OfficialSample
+
+from app.schemas.official_sample import (
+    OfficialSampleCreate,
+    OfficialSampleUpdate,
+    OfficialSampleResponse,
+)
 from sqlalchemy import func
 from fastapi import Query
 
@@ -1776,4 +1785,195 @@ async def delete_admin_user(user_id: int,
         "message": "User deleted successfully",
         "user_id": user_id,
     }
+
+
+@router.post("/road-signs", response_model=RoadSignResponse)
+async def create_road_sign(data: RoadSignCreate,
+                           current_user: dict = Depends(require_role("admin", "editor")),
+                           session: AsyncSession = Depends(get_db)):
+
+    road_sign = RoadSign(**data.model_dump())
+    session.add(road_sign)
+    await session.commit()
+    await session.refresh(road_sign)
+    return road_sign
+
+
+@router.get("/road-signs", response_model=list[RoadSignResponse])
+async def get_road_signs(current_user: dict = Depends(require_role("admin", "editor")),
+                         session: AsyncSession = Depends(get_db)):
+
+    result = await session.execute(select(RoadSign).order_by(RoadSign.id))
+    return result.scalars().all()
+
+
+
+@router.patch("/road-signs/{road_sign_id}")
+async def update_road_sign(road_sign_id: int, data: RoadSignUpdate,
+                           current_user: dict = Depends(require_role("admin", "editor")),
+                           session: AsyncSession = Depends(get_db)):
+
+    result = await session.execute(select(RoadSign).where(RoadSign.id == road_sign_id))
+    road_sign = result.scalar_one_or_none()
+    if road_sign is None:
+        raise HTTPException(status_code=404, detail="Road sign not found")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(road_sign, field, value)
+
+    await session.commit()
+    await session.refresh(road_sign)
+    return road_sign
+
+
+
+@router.delete("/road-signs/{road_sign_id}")
+async def delete_road_sign(
+    road_sign_id: int,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(RoadSign).where(RoadSign.id == road_sign_id)
+    )
+
+    road_sign = result.scalar_one_or_none()
+
+    if road_sign is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Road sign not found",
+        )
+
+    await session.delete(road_sign)
+    await session.commit()
+
+    return {
+        "message": "Road sign deleted successfully"
+    }
+
+
+@router.post(
+    "/official-samples",
+    response_model=OfficialSampleResponse,
+)
+async def create_official_sample(
+    data: OfficialSampleCreate,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    official_sample = OfficialSample(**data.model_dump())
+
+    session.add(official_sample)
+    await session.commit()
+    await session.refresh(official_sample)
+
+    return official_sample
+
+
+
+@router.get(
+    "/official-samples",
+    response_model=list[OfficialSampleResponse],
+)
+async def get_official_samples(
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSample).order_by(OfficialSample.id)
+    )
+
+    return result.scalars().all()
+
+
+
+@router.patch(
+    "/official-samples/{official_sample_id}",
+    response_model=OfficialSampleResponse,
+)
+async def update_official_sample(
+    official_sample_id: int,
+    data: OfficialSampleUpdate,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSample).where(
+            OfficialSample.id == official_sample_id
+        )
+    )
+
+    official_sample = result.scalar_one_or_none()
+
+    if official_sample is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample not found",
+        )
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(official_sample, field, value)
+
+    await session.commit()
+    await session.refresh(official_sample)
+
+    return official_sample
+
+
+
+@router.get(
+    "/official-samples/{official_sample_id}",
+    response_model=OfficialSampleResponse,
+)
+async def get_official_sample(
+    official_sample_id: int,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSample).where(
+            OfficialSample.id == official_sample_id
+        )
+    )
+
+    official_sample = result.scalar_one_or_none()
+
+    if official_sample is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample not found",
+        )
+
+    return official_sample
+
+
+
+@router.delete("/official-samples/{official_sample_id}")
+async def delete_official_sample(
+    official_sample_id: int,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSample).where(
+            OfficialSample.id == official_sample_id
+        )
+    )
+
+    official_sample = result.scalar_one_or_none()
+
+    if official_sample is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample not found",
+        )
+
+    await session.delete(official_sample)
+    await session.commit()
+
+    return {
+        "message": "Official sample deleted successfully"
+    }
+
+
 

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.vehicle import Vehicle
     from app.models.module import Module
     from app.models.road_sign import RoadSign
+    from app.models.official_sample import OfficialSample
 
 
 class ContentVersion(Base):
@@ -108,5 +109,8 @@ class ContentVersion(Base):
     back_populates="content_versions"
 )
     road_signs: Mapped[list["RoadSign"]] = relationship(
+    back_populates="content_version"
+)
+    official_samples: Mapped[list["OfficialSample"]] = relationship(
     back_populates="content_version"
 )

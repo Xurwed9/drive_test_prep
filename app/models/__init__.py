@@ -10,6 +10,8 @@ from app.models.translation import Translation
 from app.models.source import Source
 from app.models.publication import PublicationAudit
 from app.models.admin_user import AdminUser
+from app.models.road_sign import RoadSign
+from app.models.official_sample import OfficialSample
 
 
 __all__ = [
