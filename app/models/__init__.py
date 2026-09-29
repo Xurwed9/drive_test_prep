@@ -12,6 +12,7 @@ from app.models.publication import PublicationAudit
 from app.models.admin_user import AdminUser
 from app.models.road_sign import RoadSign
 from app.models.official_sample import OfficialSample
+from app.models.exam_config import ExamConfig
 
 
 __all__ = [

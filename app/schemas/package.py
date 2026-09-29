@@ -36,6 +36,14 @@ class PackageTopic(BaseModel):
     lessons: list[PackageLesson]
 
 
+class PackageExamConfig(BaseModel):
+    question_count: int
+    passing_score: int
+    time_limit_minutes: int | None
+    max_mistakes: int | None
+    is_active: bool
+
+
 class ContentPackage(BaseModel):
     schema_version: int
 
@@ -53,5 +61,5 @@ class ContentPackage(BaseModel):
     package_url: str | None
     minimum_app_version: str | None
     published_at: datetime | None
-
     topics: list[PackageTopic]
+    exam_config: PackageExamConfig | None

@@ -42,12 +42,13 @@ from app.models.vehicle import Vehicle
 from app.models.module import Module
 from app.models.road_sign import RoadSign
 from app.models.official_sample import OfficialSample
+from app.models.exam_config import ExamConfig
 
 from app.schemas.official_sample import (
     OfficialSampleCreate,
     OfficialSampleUpdate,
-    OfficialSampleResponse,
-)
+    OfficialSampleResponse,)
+from app.schemas.exam_config import ExamConfigCreate, ExamConfigResponse, ExamConfigUpdate
 from sqlalchemy import func
 from fastapi import Query
 
@@ -525,6 +526,47 @@ async def update_content_version_status(
         "published_at": content_version.published_at,
     }
 
+
+
+@router.post("/content-versions/{current_version_id}/rollback/{target_version_id}")
+async def rollback_content_version(current_version_id: int, target_version_id: int,
+                                   session: AsyncSession = Depends(get_db),
+                                   current_user: dict = Depends(require_role("admin", "editor"))):
+
+    current_version = await session.get(ContentVersion, current_version_id)
+    if current_version is None:
+        raise HTTPException(status_code=404, detail="Current content version not found")
+    target_version = await session.get(ContentVersion, target_version_id)
+    if target_version is None:
+        raise HTTPException(status_code=404, detail="Target content version not found")
+
+    if (current_version.state_id != target_version.state_id
+        or current_version.vehicle_id != target_version.vehicle_id
+        or current_version.module_id != target_version.module_id):
+        raise HTTPException(status_code=400, 
+                            detail="Versions belong to different content scopes")
+    if target_version.status != "published":
+        raise HTTPException(status_code=400, detail="Target content version must be published")
+
+    if current_version.available:
+        current_version.available = False
+    target_version.available = True
+
+    audit = PublicationAudit(content_version_id=target_version.id,
+                             action="rollback",
+                             user_id=current_user["user_id"],
+                             created_at=datetime.now(timezone.utc),
+                             notes=(
+                                 f"Rolled back from content version"
+                                 f"{current_version.version} to {target_version.version}"
+                             ))
+    session.add(audit)
+    await session.commit()
+    return {
+        "message": "Content version rolled back successfully",
+        "active_version_id": target_version.id,
+        "active_version": target_version.version,
+    }
 
 
 @router.post("/content-version/{target_id}/clone-from/{source_id}")
@@ -1977,3 +2019,141 @@ async def delete_official_sample(
 
 
 
+@router.post(
+    "exam-config",
+    response_model=ExamConfigResponse,
+)
+async def create_exam_config(
+    data: ExamConfigCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin", "editor")),
+):
+    content_version = await db.get(
+        ContentVersion,
+        data.content_version_id,
+    )
+
+    if content_version is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Content version not found",
+        )
+
+    existing = await db.scalar(
+        select(ExamConfig).where(
+            ExamConfig.content_version_id == data.content_version_id
+        )
+    )
+
+    if existing is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Exam config already exists for this content version",
+        )
+
+    exam_config = ExamConfig(**data.model_dump())
+
+    db.add(exam_config)
+    await db.commit()
+    await db.refresh(exam_config)
+
+    return exam_config
+
+
+
+@router.get(
+    "/exam-configs",
+    response_model=list[ExamConfigResponse],
+)
+async def get_exam_configs(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin", "editor")),
+):
+    result = await db.scalars(
+        select(ExamConfig)
+    )
+
+    return result.all()
+
+
+
+@router.get(
+    "/exam-configs/{exam_config_id}",
+    response_model=ExamConfigResponse,
+)
+async def get_exam_config(
+    exam_config_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin", "editor")),
+):
+    exam_config = await db.get(
+        ExamConfig,
+        exam_config_id,
+    )
+
+    if exam_config is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config not found",
+        )
+
+    return exam_config
+
+
+
+@router.patch(
+    "/exam-configs/{exam_config_id}",
+    response_model=ExamConfigResponse,
+)
+async def update_exam_config(
+    exam_config_id: int,
+    data: ExamConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin", "editor")),
+):
+    exam_config = await db.get(
+        ExamConfig,
+        exam_config_id,
+    )
+
+    if exam_config is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config not found",
+        )
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(exam_config, field, value)
+
+    await db.commit()
+    await db.refresh(exam_config)
+
+    return exam_config
+
+
+
+@router.delete(
+    "/exam-configs/{exam_config_id}",
+)
+async def delete_exam_config(
+    exam_config_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin", "editor")),
+):
+    exam_config = await db.get(
+        ExamConfig,
+        exam_config_id,
+    )
+
+    if exam_config is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config not found",
+        )
+
+    await db.delete(exam_config)
+    await db.commit()
+
+    return {
+        "message": "Exam config deleted successfully"
+    }
