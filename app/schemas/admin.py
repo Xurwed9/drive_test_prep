@@ -131,3 +131,65 @@ class QuestionOptionUpdate(BaseModel):
 class TranslationUpdate(BaseModel):
     language: str | None = None
     text: str | None = None
+
+
+class StateCreate(BaseModel):
+    code: str
+    name: str
+    status: str = "coming_soon"
+
+
+class StateUpdate(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    status: str | None = None
+
+
+class StateResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
+
+class VehicleCreate(BaseModel):
+    code: str
+    name: str
+
+
+class VehicleUpdate(BaseModel):
+    code: str | None = None
+    name: str | None = None
+
+
+class VehicleResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+
+class ModuleCreate(BaseModel):
+    vehicle_id: int
+    code: str
+    name: str
+
+
+class ModuleUpdate(BaseModel):
+    vehicle_id: int | None = None
+    code: str | None = None
+    name: str | None = None
+
+
+class ModuleResponse(BaseModel):
+    id: int
+    vehicle_id: int
+    code: str
+    name: str
+
+    model_config = {"from_attributes": True}

@@ -18,6 +18,8 @@ from app.schemas.admin import (
     SourceCreate,
     AdminLogin,AdminUserCreate,AdminUserUpdate,TopicUpdate,LessonUpdate,
     QuestionUpdate, QuestionOptionUpdate, TranslationUpdate,SourceUpdate,
+    StateCreate,StateUpdate,StateResponse, VehicleCreate,VehicleUpdate,VehicleResponse,
+    ModuleCreate, ModuleUpdate, ModuleResponse, 
 )
 from app.schemas.road_sign import RoadSignCreate, RoadSignUpdate, RoadSignResponse
 from app.models.publication import PublicationAudit
@@ -55,6 +57,296 @@ from fastapi import Query
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+@router.post("/states", response_model=StateResponse)
+async def create_state(
+    data: StateCreate,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    result = await session.execute(
+    select(State).where(State.code == data.code.upper())
+)
+
+    existing_state = result.scalar_one_or_none()
+
+    if existing_state:
+        raise HTTPException(
+            status_code=400,
+            detail="State with this code already exists",
+            )
+    state = State(
+        code=data.code.upper(),
+        name=data.name,
+        status=data.status,
+    )
+
+    session.add(state)
+    await session.commit()
+    await session.refresh(state)
+
+    return state
+
+
+@router.get("/states", response_model=list[StateResponse])
+async def get_states(
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    result = await session.execute(
+        select(State).order_by(State.code)
+    )
+    return result.scalars().all()
+
+
+@router.get("/states/{state_id}", response_model=StateResponse)
+async def get_state(
+    state_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    state = await session.get(State, state_id)
+
+    if state is None:
+        raise HTTPException(status_code=404, detail="State not found")
+
+    return state
+
+
+@router.patch("/states/{state_id}", response_model=StateResponse)
+async def update_state(
+    state_id: int,
+    data: StateUpdate,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    state = await session.get(State, state_id)
+
+    if state is None:
+        raise HTTPException(status_code=404, detail="State not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "code" in update_data:
+        update_data["code"] = update_data["code"].upper()
+
+    for field, value in update_data.items():
+        setattr(state, field, value)
+
+    await session.commit()
+    await session.refresh(state)
+
+    return state
+
+
+@router.delete("/states/{state_id}")
+async def delete_state(
+    state_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin")),
+):
+    state = await session.get(State, state_id)
+
+    if state is None:
+        raise HTTPException(status_code=404, detail="State not found")
+
+    await session.delete(state)
+    await session.commit()
+
+    return {"message": "State deleted successfully"}
+
+
+@router.post("/vehicles", response_model=VehicleResponse)
+async def create_vehicle(
+    data: VehicleCreate,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    result = await session.execute(
+    select(Vehicle).where(Vehicle.code == data.code.lower())
+)
+
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=400,
+            detail="Vehicle with this code already exists"
+            )
+    vehicle = Vehicle(
+        code=data.code.lower(),
+        name=data.name,
+    )
+
+    session.add(vehicle)
+    await session.commit()
+    await session.refresh(vehicle)
+
+    return vehicle
+
+
+@router.get("/vehicles", response_model=list[VehicleResponse])
+async def get_vehicles(
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    result = await session.execute(
+        select(Vehicle).order_by(Vehicle.code)
+    )
+    return result.scalars().all()
+
+
+@router.get("/vehicles/{vehicle_id}", response_model=VehicleResponse)
+async def get_vehicle(
+    vehicle_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    vehicle = await session.get(Vehicle, vehicle_id)
+
+    if vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    return vehicle
+
+
+@router.patch("/vehicles/{vehicle_id}", response_model=VehicleResponse)
+async def update_vehicle(
+    vehicle_id: int,
+    data: VehicleUpdate,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    vehicle = await session.get(Vehicle, vehicle_id)
+
+    if vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "code" in update_data:
+        update_data["code"] = update_data["code"].lower()
+
+    for field, value in update_data.items():
+        setattr(vehicle, field, value)
+
+    await session.commit()
+    await session.refresh(vehicle)
+
+    return vehicle
+
+
+@router.delete("/vehicles/{vehicle_id}")
+async def delete_vehicle(
+    vehicle_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin")),
+):
+    vehicle = await session.get(Vehicle, vehicle_id)
+
+    if vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    await session.delete(vehicle)
+    await session.commit()
+
+    return {"message": "Vehicle deleted successfully"}
+
+
+
+@router.post("/modules", response_model=ModuleResponse)
+async def create_module(
+    data: ModuleCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    result = await db.execute(
+    select(Module).where(Module.code == data.code.lower())
+)
+
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=400,
+            detail="Module with this code already exists"
+        )
+    module = Module(
+        vehicle_id=data.vehicle_id,
+        code=data.code.lower(),
+        name=data.name,
+    )
+
+    db.add(module)
+    await db.commit()
+    await db.refresh(module)
+
+    return module
+
+
+@router.get("/modules", response_model=list[ModuleResponse])
+async def get_modules(
+    db: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    result = await db.execute(
+        select(Module).order_by(Module.code)
+    )
+    return result.scalars().all()
+
+
+@router.get("/modules/{module_id}", response_model=ModuleResponse)
+async def get_module(
+    module_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    module = await db.get(Module, module_id)
+
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    return module
+
+
+@router.patch("/modules/{module_id}", response_model=ModuleResponse)
+async def update_module(
+    module_id: int,
+    data: ModuleUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin", "editor")),
+):
+    module = await db.get(Module, module_id)
+
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "code" in update_data:
+        update_data["code"] = update_data["code"].lower()
+
+    for field, value in update_data.items():
+        setattr(module, field, value)
+
+    await db.commit()
+    await db.refresh(module)
+
+    return module
+
+
+@router.delete("/modules/{module_id}")
+async def delete_module(
+    module_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: AdminUser = Depends(require_role("admin")),
+):
+    module = await db.get(Module, module_id)
+
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    await db.delete(module)
+    await db.commit()
+
+    return {"message": "Module deleted successfully"}
 
 
 @router.post("/content-versions")
