@@ -236,10 +236,22 @@ async def get_content_package(
     .selectinload(Topic.lessons)
     .selectinload(Lesson.questions)
     .selectinload(Question.options),
+
     selectinload(ContentVersion.topics)
     .selectinload(Topic.lessons)
     .selectinload(Lesson.questions)
     .selectinload(Question.translations),
+
+    selectinload(ContentVersion.topics)
+    .selectinload(Topic.lessons)
+    .selectinload(Lesson.questions)
+    .selectinload(Question.source),
+
+    selectinload(ContentVersion.exam_config),
+
+    selectinload(ContentVersion.road_signs),
+
+    selectinload(ContentVersion.official_samples),
 )
         .where(
             ContentVersion.state_id == state.id,

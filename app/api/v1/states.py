@@ -15,6 +15,7 @@ async def get_state(state_code: str, session: AsyncSession = Depends(get_db)):
     if state is None:
         raise HTTPException(status_code=404, detail="State not found",)
     return {
+        "id": state.id,
         "code": state.code,
         "name": state.name,
         "status": state.status,

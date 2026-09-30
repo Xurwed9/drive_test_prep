@@ -1877,8 +1877,9 @@ async def update_translation(
             detail="Translation not found",
         )
 
-    translation.language = data.language
-    translation.text = data.text
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(translation, field, value)
 
     await session.commit()
     await session.refresh(translation)
