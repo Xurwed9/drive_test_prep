@@ -5,6 +5,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.question import Question
+    from app.models.question_option_translation import QuestionOptionTranslation
 
 
 class QuestionOption(Base):
@@ -30,3 +31,7 @@ class QuestionOption(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False,)
     question: Mapped["Question"] = relationship(back_populates="options")
+    translations: Mapped[list["QuestionOptionTranslation"]] = relationship(
+    back_populates="question_option",
+    cascade="all, delete-orphan",
+    )

@@ -6,6 +6,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.content_version import ContentVersion
+    from app.models.exam_config_translation import ExamConfigTranslation
 
 
 class ExamConfig(Base):
@@ -46,3 +47,7 @@ class ExamConfig(Base):
     )
 
     content_version: Mapped["ContentVersion"] = relationship()
+    translations: Mapped[list["ExamConfigTranslation"]] = relationship(
+        back_populates="exam_config",
+        cascade="all, delete-orphan",
+    )

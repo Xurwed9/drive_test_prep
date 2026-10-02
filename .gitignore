@@ -3,3 +3,4 @@
 __pycache__/
 *.pyc
 *.db
+postgresql+asyncpg://internet_magazin_user:Je3wPdc6rZE1cPXpm3qvkGmQQQQF0SBl@dpg-dan740f40ujc73atf8jg-a.frankfurt-postgres.render.com/internet_magazin_ai_db

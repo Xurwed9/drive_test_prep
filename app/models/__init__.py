@@ -13,6 +13,9 @@ from app.models.admin_user import AdminUser
 from app.models.road_sign import RoadSign
 from app.models.official_sample import OfficialSample
 from app.models.exam_config import ExamConfig
+from app.models.road_sign_translation import RoadSignTranslation
+from app.models.official_sample_translation import OfficialSampleTranslation
+from app.models.exam_config_translation import ExamConfigTranslation
 
 
 __all__ = [
@@ -28,4 +31,10 @@ __all__ = [
     "PublicationAudit",
     "QuestionOption",
     "AdminUser",
+    "RoadSign",
+    "OfficialSample",
+    "ExamConfig",
+    "RoadSignTranslation",
+    "OfficialSampleTranslation",
+    "ExamConfigTranslation",
 ]

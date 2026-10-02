@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.content_version import ContentVersion
     from app.models.lesson import Lesson
+    from app.models.topic_translation import TopicTranslation
 
 
 class Topic(Base):
@@ -28,4 +29,8 @@ class Topic(Base):
     )
     content_version: Mapped["ContentVersion"] = relationship(
     back_populates="topics"
-)
+    )
+    translations: Mapped[list["TopicTranslation"]] = relationship(
+    back_populates="topic",
+    cascade="all, delete-orphan",
+    )

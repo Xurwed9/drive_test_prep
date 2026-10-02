@@ -19,9 +19,15 @@ from app.schemas.admin import (
     AdminLogin,AdminUserCreate,AdminUserUpdate,TopicUpdate,LessonUpdate,
     QuestionUpdate, QuestionOptionUpdate, TranslationUpdate,SourceUpdate,
     StateCreate,StateUpdate,StateResponse, VehicleCreate,VehicleUpdate,VehicleResponse,
-    ModuleCreate, ModuleUpdate, ModuleResponse, 
-)
-from app.schemas.road_sign import RoadSignCreate, RoadSignUpdate, RoadSignResponse
+    ModuleCreate, ModuleUpdate, ModuleResponse, AdminLanguageUpdate,
+    AdminLanguagesResponse, LanguageResponse, QuestionOptionTranslationCreate,
+    QuestionOptionTranslationUpdate, QuestionOptionTranslationStatusUpdate,
+    TopicTranslationCreate, TopicTranslationUpdate,TopicTranslationStatusUpdate,
+    LessonTranslationCreateDirect, LessonTranslationUpdate, LessonTranslationStatusUpdate,
+    )
+from app.schemas.road_sign import (RoadSignCreate, RoadSignUpdate, RoadSignResponse,
+                                   RoadSignTranslationBase,RoadSignTranslationCreate,RoadSignTranslationResponse,
+                                   RoadSignTranslationUpdate,)
 from app.models.publication import PublicationAudit
 from app.models.topic import Topic
 from app.models.lesson import Lesson
@@ -45,18 +51,102 @@ from app.models.module import Module
 from app.models.road_sign import RoadSign
 from app.models.official_sample import OfficialSample
 from app.models.exam_config import ExamConfig
+from app.models.question_option_translation import QuestionOptionTranslation
+from app.models.topic_translation import TopicTranslation
+from app.models.lesson_translation import LessonTranslation
+from app.models.road_sign_translation import RoadSignTranslation
+from app.models.official_sample_translation import OfficialSampleTranslation
+from app.models.exam_config_translation import ExamConfigTranslation
 
 from app.schemas.official_sample import (
     OfficialSampleCreate,
     OfficialSampleUpdate,
-    OfficialSampleResponse,)
-from app.schemas.exam_config import ExamConfigCreate, ExamConfigResponse, ExamConfigUpdate
+    OfficialSampleResponse,
+    OfficialSampleTranslationBase,OfficialSampleTranslationCreate,OfficialSampleTranslationResponse,
+    OfficialSampleTranslationUpdate,)
+
+from app.schemas.exam_config import (ExamConfigCreate, ExamConfigResponse, ExamConfigUpdate,
+                                     ExamConfigTranslationBase, ExamConfigTranslationCreate,
+                                     ExamConfigTranslationResponse, ExamConfigTranslationUpdate,)
 from sqlalchemy import func
 from fastapi import Query
+from app.core.languages import SUPPORTED_LANGUAGES
 
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+
+@router.patch("/me/language")
+async def update_my_language(
+    data: AdminLanguageUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported language",
+        )
+
+    result = await db.execute(
+        select(AdminUser).where(
+            AdminUser.id == current_user["user_id"]
+        )
+    )
+
+    admin = result.scalar_one_or_none()
+
+    if admin is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Admin not found",
+        )
+
+    admin.preferred_language = data.language
+
+    await db.commit()
+    await db.refresh(admin)
+
+    return {
+        "language": admin.preferred_language
+    }
+
+
+
+@router.get("/me/languages",response_model=AdminLanguagesResponse,)
+async def get_my_languages(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(AdminUser).where(
+            AdminUser.id == current_user["user_id"]
+        )
+    )
+
+    admin = result.scalar_one_or_none()
+
+    if admin is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Admin not found",
+        )
+
+    languages = [
+        {
+            "code": code,
+            "name": name,
+        }
+        for code, name in SUPPORTED_LANGUAGES.items()
+    ]
+
+    return {
+        "current_language": admin.preferred_language,
+        "languages": languages,
+    }
+
 
 
 @router.post("/states", response_model=StateResponse)
@@ -1196,25 +1286,199 @@ async def update_translation_status(
 
 
 
+@router.get("/topic-translations")
+async def get_topic_translations(
+    topic_id: int,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(TopicTranslation).where(
+            TopicTranslation.topic_id == topic_id
+        )
+    )
+
+    translations = result.scalars().all()
+
+    return [
+        {
+            "id": translation.id,
+            "topic_id": translation.topic_id,
+            "language": translation.language,
+            "title": translation.title,
+            "review_status": translation.review_status,
+        }
+        for translation in translations
+    ]
+
+
+@router.post("/topic-translations")
+async def create_topic_translation(
+    data: TopicTranslationCreate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(Topic).where(
+            Topic.id == data.topic_id
+        )
+    )
+
+    topic = result.scalar_one_or_none()
+
+    if topic is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Topic not found",
+        )
+
+    translation = TopicTranslation(
+        topic_id=data.topic_id,
+        language=data.language,
+        title=data.title,
+        review_status="draft",
+    )
+
+    session.add(translation)
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "topic_id": translation.topic_id,
+        "language": translation.language,
+        "title": translation.title,
+        "review_status": translation.review_status,
+    }
+
+
+@router.patch("/topic-translations/{translation_id}")
+async def update_topic_translation(
+    translation_id: int,
+    data: TopicTranslationUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(TopicTranslation).where(
+            TopicTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Topic translation not found",
+        )
+
+    translation.title = data.title
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "topic_id": translation.topic_id,
+        "language": translation.language,
+        "title": translation.title,
+        "review_status": translation.review_status,
+    }
+
+
+@router.patch("/topic-translations/{translation_id}/status")
+async def update_topic_translation_status(
+    translation_id: int,
+    data: TopicTranslationStatusUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(TopicTranslation).where(
+            TopicTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Topic translation not found",
+        )
+
+    allowed_transitions = {
+        "draft": {"translation_completed"},
+        "translation_completed": {"native_review"},
+        "native_review": {"approved"},
+        "approved": set(),
+    }
+
+    current_status = translation.review_status
+    new_status = data.status
+
+    if new_status not in allowed_transitions[current_status]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot change status from {current_status} to {new_status}",
+        )
+
+    translation.review_status = new_status
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "topic_id": translation.topic_id,
+        "language": translation.language,
+        "title": translation.title,
+        "review_status": translation.review_status,
+    }
+
+
 @router.get("/topics")
 async def get_topics(
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
     result = await session.execute(
-        select(Topic).order_by(Topic.id)
+    select(Topic)
+    .options(
+        selectinload(Topic.translations)
     )
+    .order_by(Topic.id)
+)
 
     topics = result.scalars().all()
 
     return [
-        {
-            "id": topic.id,
-            "content_version_id": topic.content_version_id,
-            "title": topic.title,
-        }
-        for topic in topics
-    ]
+    {
+        "id": topic.id,
+        "content_version_id": topic.content_version_id,
+        "title": topic.title,
+        "translations": [
+            {
+                "id": translation.id,
+                "language": translation.language,
+                "title": translation.title,
+                "review_status": translation.review_status,
+            }
+            for translation in topic.translations
+        ],
+    }
+    for topic in topics
+]
 
 
 
@@ -1224,21 +1488,53 @@ async def create_topic(
     current_user: dict = Depends(
         require_role("admin", "editor")
     ),
-    session: AsyncSession = Depends(get_db)
+    session: AsyncSession = Depends(get_db),
 ):
     result = await session.execute(
         select(ContentVersion).where(
             ContentVersion.id == data.content_version_id
         )
     )
-    content_version = result.scalar_one_or_none()
-    if content_version is None:
-        raise HTTPException(status=404, detail="Content version not found")
 
-    topic = Topic(content_version_id=data.content_version_id,title=data.title)
+    content_version = result.scalar_one_or_none()
+
+    if content_version is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Content version not found",
+        )
+
+    topic = Topic(
+        content_version_id=data.content_version_id,
+        title=data.title,
+    )
+
     session.add(topic)
+
+    await session.flush()
+
+    for translation_data in data.translations:
+        if translation_data.language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unsupported language: "
+                    f"{translation_data.language}"
+                ),
+            )
+
+        translation = TopicTranslation(
+            topic_id=topic.id,
+            language=translation_data.language,
+            title=translation_data.title,
+            review_status="draft",
+        )
+
+        session.add(translation)
+
     await session.commit()
     await session.refresh(topic)
+
     return {
         "id": topic.id,
         "content_version_id": topic.content_version_id,
@@ -1252,7 +1548,17 @@ async def get_topic(
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
-    topic = await session.get(Topic, topic_id)
+    result = await session.execute(
+    select(Topic)
+    .options(
+        selectinload(Topic.translations)
+    )
+    .where(
+        Topic.id == topic_id
+    )
+)
+
+    topic = result.scalar_one_or_none()
 
     if topic is None:
         raise HTTPException(
@@ -1261,10 +1567,19 @@ async def get_topic(
         )
 
     return {
-        "id": topic.id,
-        "content_version_id": topic.content_version_id,
-        "title": topic.title,
-    }
+    "id": topic.id,
+    "content_version_id": topic.content_version_id,
+    "title": topic.title,
+    "translations": [
+        {
+            "id": translation.id,
+            "language": translation.language,
+            "title": translation.title,
+            "review_status": translation.review_status,
+        }
+        for translation in topic.translations
+    ],
+}
 
 
 
@@ -1327,21 +1642,35 @@ async def get_lessons(
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
     result = await session.execute(
-        select(Lesson).order_by(Lesson.id)
+    select(Lesson)
+    .options(
+        selectinload(Lesson.translations)
     )
+    .order_by(Lesson.id)
+)
 
     lessons = result.scalars().all()
 
     return [
-        {
-            "id": lesson.id,
-            "topic_id": lesson.topic_id,
-            "title": lesson.title,
-            "description": lesson.description,
-            "order": lesson.order,
-        }
-        for lesson in lessons
-    ]
+    {
+        "id": lesson.id,
+        "topic_id": lesson.topic_id,
+        "title": lesson.title,
+        "description": lesson.description,
+        "order": lesson.order,
+        "translations": [
+            {
+                "id": translation.id,
+                "language": translation.language,
+                "title": translation.title,
+                "description": translation.description,
+                "review_status": translation.review_status,
+            }
+            for translation in lesson.translations
+        ],
+    }
+    for lesson in lessons
+]
 
 
 
@@ -1366,13 +1695,25 @@ async def create_lesson(
         )
 
     lesson = Lesson(
-        topic_id=data.topic_id,
-        title=data.title,
-        description=data.description,
-        order=data.order,
-    )
+    topic_id=data.topic_id,
+    title=data.title,
+    description=data.description,
+    order=data.order,
+)
 
     session.add(lesson)
+
+    await session.flush()
+    for translation_data in data.translations:
+        translation = LessonTranslation(
+            lesson_id=lesson.id,
+            language=translation_data.language,
+            title=translation_data.title,
+            description=translation_data.description,
+            review_status="draft",
+        )
+
+        session.add(translation)
     await session.commit()
     await session.refresh(lesson)
 
@@ -1391,7 +1732,17 @@ async def get_lesson(
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
-    lesson = await session.get(Lesson, lesson_id)
+    result = await session.execute(
+    select(Lesson)
+    .options(
+        selectinload(Lesson.translations)
+    )
+    .where(
+        Lesson.id == lesson_id
+    )
+)
+
+    lesson = result.scalar_one_or_none()
 
     if lesson is None:
         raise HTTPException(
@@ -1400,12 +1751,22 @@ async def get_lesson(
         )
 
     return {
-        "id": lesson.id,
-        "topic_id": lesson.topic_id,
-        "title": lesson.title,
-        "description": lesson.description,
-        "order": lesson.order,
-    }
+    "id": lesson.id,
+    "topic_id": lesson.topic_id,
+    "title": lesson.title,
+    "description": lesson.description,
+    "order": lesson.order,
+    "translations": [
+        {
+            "id": translation.id,
+            "language": translation.language,
+            "title": translation.title,
+            "description": translation.description,
+            "review_status": translation.review_status,
+        }
+        for translation in lesson.translations
+    ],
+}
 
 
 @router.patch("/lessons/{lesson_id}")
@@ -1458,13 +1819,188 @@ async def delete_lesson(
     }
 
 
+@router.get("/lesson-translations")
+async def get_lesson_translations(
+    lesson_id: int,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(LessonTranslation).where(
+            LessonTranslation.lesson_id == lesson_id
+        )
+    )
+
+    translations = result.scalars().all()
+
+    return [
+        {
+            "id": translation.id,
+            "lesson_id": translation.lesson_id,
+            "language": translation.language,
+            "title": translation.title,
+            "description": translation.description,
+            "review_status": translation.review_status,
+        }
+        for translation in translations
+    ]
+
+
+@router.post("/lesson-translations")
+async def create_lesson_translation(
+    data: LessonTranslationCreateDirect,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(Lesson).where(
+            Lesson.id == data.lesson_id
+        )
+    )
+
+    lesson = result.scalar_one_or_none()
+
+    if lesson is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Lesson not found",
+        )
+
+    translation = LessonTranslation(
+        lesson_id=data.lesson_id,
+        language=data.language,
+        title=data.title,
+        description=data.description,
+        review_status="draft",
+    )
+
+    session.add(translation)
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "lesson_id": translation.lesson_id,
+        "language": translation.language,
+        "title": translation.title,
+        "description": translation.description,
+        "review_status": translation.review_status,
+    }
+
+
+@router.patch("/lesson-translations/{translation_id}")
+async def update_lesson_translation(
+    translation_id: int,
+    data: LessonTranslationUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(LessonTranslation).where(
+            LessonTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Lesson translation not found",
+        )
+
+    translation.title = data.title
+    translation.description = data.description
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "lesson_id": translation.lesson_id,
+        "language": translation.language,
+        "title": translation.title,
+        "description": translation.description,
+        "review_status": translation.review_status,
+    }
+
+
+@router.patch("/lesson-translations/{translation_id}/status")
+async def update_lesson_translation_status(
+    translation_id: int,
+    data: LessonTranslationStatusUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(LessonTranslation).where(
+            LessonTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Lesson translation not found",
+        )
+
+    allowed_transitions = {
+        "draft": {"translation_completed"},
+        "translation_completed": {"native_review"},
+        "native_review": {"approved"},
+        "approved": set(),
+    }
+
+    current_status = translation.review_status
+    new_status = data.status
+
+    if new_status not in allowed_transitions[current_status]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot change status "
+                f"from {current_status} to {new_status}"
+            ),
+        )
+
+    translation.review_status = new_status
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "lesson_id": translation.lesson_id,
+        "language": translation.language,
+        "title": translation.title,
+        "description": translation.description,
+        "review_status": translation.review_status,
+    }
+
+
 @router.get("/questions")
 async def get_questions(
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
     result = await session.execute(
-        select(Question).order_by(Question.id)
+    select(Question)
+    .options(
+    selectinload(Question.translations),
+    selectinload(Question.options).selectinload(
+        QuestionOption.translations
+    ),)
     )
 
     questions = result.scalars().all()
@@ -1479,6 +2015,14 @@ async def get_questions(
             "question_type": question.question_type,
             "is_official": question.is_official,
             "source_id": question.source_id,
+            "translations": [
+            {
+                "id": translation.id,
+                "language": translation.language,
+                "text": translation.text,
+                "review_status": translation.review_status,
+            }
+            for translation in question.translations],   
         }
         for question in questions
     ]
@@ -1508,16 +2052,34 @@ async def create_question(
         )
 
     question = Question(
-        lesson_id=data.lesson_id,
-        content_key=data.content_key,
-        text=data.text,
-        correct_option_id=data.correct_option_id,
-        question_type=data.question_type,
-        is_official=data.is_official,
-        source_id=data.source_id,
-    )
-
+    lesson_id=data.lesson_id,
+    content_key=data.content_key,
+    text=data.text,
+    correct_option_id=data.correct_option_id,
+    question_type=data.question_type,
+    is_official=data.is_official,
+    source_id=data.source_id,
+)
     session.add(question)
+
+    await session.flush()
+
+    for language, translation_data in data.translations.items():
+        if language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported language: {language}",
+            )
+
+        translation = Translation(
+            question_id=question.id,
+            language=language,
+            text=translation_data.text,
+            review_status="draft",
+        )
+
+        session.add(translation)
+
     await session.commit()
     await session.refresh(question)
 
@@ -1528,13 +2090,20 @@ async def create_question(
     }
 
 
+
 @router.get("/questions/{question_id}")
 async def get_question(
     question_id: int,
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
-    question = await session.get(Question, question_id)
+    result = await session.execute(
+    select(Question)
+    .options(selectinload(Question.translations))
+    .where(Question.id == question_id)
+)
+
+    question = result.scalar_one_or_none()
 
     if question is None:
         raise HTTPException(
@@ -1551,7 +2120,17 @@ async def get_question(
         "question_type": question.question_type,
         "is_official": question.is_official,
         "source_id": question.source_id,
+        "translations": [
+        {
+            "id": translation.id,
+            "language": translation.language,
+            "text": translation.text,
+            "review_status": translation.review_status,
+        }
+        for translation in question.translations
+    ],
     }
+
 
 
 @router.patch("/questions/{question_id}")
@@ -1633,8 +2212,12 @@ async def get_question_options(
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
     result = await session.execute(
-        select(QuestionOption).order_by(QuestionOption.id)
+    select(QuestionOption)
+    .options(
+        selectinload(QuestionOption.translations)
     )
+    .order_by(QuestionOption.id)
+)
 
     options = result.scalars().all()
 
@@ -1645,6 +2228,15 @@ async def get_question_options(
             "option_id": option.option_id,
             "text": option.text,
             "order": option.order,
+            "translations": [
+                {
+                    "id": translation.id,
+                    "language": translation.language,
+                    "text": translation.text,
+                    "review_status": translation.review_status,
+                }
+                for translation in option.translations
+            ]
         }
         for option in options
     ]
@@ -1681,6 +2273,25 @@ async def create_question_option(
     )
 
     session.add(option)
+
+    await session.flush()
+
+    for translation_data in data.translations:
+        if translation_data.language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported language: {translation_data.language}",
+            )
+
+        translation = QuestionOptionTranslation(
+            question_option_id=option.id,
+            language=translation_data.language,
+            text=translation_data.text,
+            review_status="draft",
+        )
+
+        session.add(translation)
+
     await session.commit()
     await session.refresh(option)
 
@@ -1700,7 +2311,17 @@ async def get_question_option(
     session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
-    option = await session.get(QuestionOption, option_id)
+    result = await session.execute(
+    select(QuestionOption)
+    .options(
+        selectinload(QuestionOption.translations)
+    )
+    .where(
+        QuestionOption.id == option_id
+    )
+)
+
+    option = result.scalar_one_or_none()
 
     if option is None:
         raise HTTPException(
@@ -1709,12 +2330,21 @@ async def get_question_option(
         )
 
     return {
-        "id": option.id,
-        "question_id": option.question_id,
-        "option_id": option.option_id,
-        "text": option.text,
-        "order": option.order,
-    }
+    "id": option.id,
+    "question_id": option.question_id,
+    "option_id": option.option_id,
+    "text": option.text,
+    "order": option.order,
+    "translations": [
+        {
+            "id": translation.id,
+            "language": translation.language,
+            "text": translation.text,
+            "review_status": translation.review_status,
+        }
+        for translation in option.translations
+    ],
+}
 
 
 
@@ -1746,6 +2376,169 @@ async def update_question_option(
         "option_id": option.option_id,
         "text": option.text,
         "order": option.order,
+    }
+
+
+@router.patch(
+    "/question-option-translations/{translation_id}"
+)
+async def update_question_option_translation(
+    translation_id: int,
+    data: QuestionOptionTranslationUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(QuestionOptionTranslation).where(
+            QuestionOptionTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Question option translation not found",
+        )
+
+    translation.text = data.text
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "question_option_id": translation.question_option_id,
+        "language": translation.language,
+        "text": translation.text,
+        "review_status": translation.review_status,
+    }
+
+
+
+@router.delete(
+    "/question-option-translations/{translation_id}"
+)
+async def delete_question_option_translation(
+    translation_id: int,
+    current_user: dict = Depends(
+        require_role("admin")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(QuestionOptionTranslation).where(
+            QuestionOptionTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Question option translation not found",
+        )
+
+    await session.delete(translation)
+    await session.commit()
+
+    return {
+        "message": "Question option translation deleted"
+    }
+
+
+
+@router.get("/question-option-translations")
+async def get_question_option_translations(
+    question_option_id: int,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(QuestionOptionTranslation).where(
+            QuestionOptionTranslation.question_option_id
+            == question_option_id
+        )
+    )
+
+    translations = result.scalars().all()
+
+    return [
+        {
+            "id": translation.id,
+            "question_option_id": translation.question_option_id,
+            "language": translation.language,
+            "text": translation.text,
+            "review_status": translation.review_status,
+        }
+        for translation in translations
+    ]
+
+
+@router.patch(
+    "/question-option-translations/{translation_id}/status"
+)
+async def update_question_option_translation_status(
+    translation_id: int,
+    data: QuestionOptionTranslationStatusUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(QuestionOptionTranslation).where(
+            QuestionOptionTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Question option translation not found",
+        )
+
+    allowed_transitions = {
+        "draft": {"translation_completed"},
+        "translation_completed": {"native_review"},
+        "native_review": {"approved"},
+        "approved": set(),
+    }
+
+    current_status = translation.review_status
+
+    if data.status != current_status and (
+        data.status
+        not in allowed_transitions.get(current_status, set())
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot change status "
+                f"from {current_status} "
+                f"to {data.status}"
+            ),
+        )
+
+    translation.review_status = data.status
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return {
+        "id": translation.id,
+        "question_option_id": translation.question_option_id,
+        "language": translation.language,
+        "text": translation.text,
+        "review_status": translation.review_status,
     }
 
 
@@ -2138,13 +2931,54 @@ async def create_road_sign(data: RoadSignCreate,
     return road_sign
 
 
-@router.get("/road-signs", response_model=list[RoadSignResponse])
-async def get_road_signs(current_user: dict = Depends(require_role("admin", "editor")),
-                         session: AsyncSession = Depends(get_db)):
+@router.get(
+    "/road-signs",
+    response_model=list[RoadSignResponse],
+)
+async def get_road_signs(
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(RoadSign)
+        .options(
+            selectinload(RoadSign.translations)
+        )
+    )
 
-    result = await session.execute(select(RoadSign).order_by(RoadSign.id))
-    return result.scalars().all()
+    road_signs = result.scalars().all()
 
+    return road_signs
+
+
+@router.get(
+    "/road-signs/{road_sign_id}",
+    response_model=RoadSignResponse,
+)
+async def get_road_sign(
+    road_sign_id: int,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(RoadSign)
+        .options(
+            selectinload(RoadSign.translations)
+        )
+        .where(
+            RoadSign.id == road_sign_id
+        )
+    )
+
+    road_sign = result.scalar_one_or_none()
+
+    if road_sign is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Road sign not found",
+        )
+
+    return road_sign
 
 
 @router.patch("/road-signs/{road_sign_id}")
@@ -2192,6 +3026,170 @@ async def delete_road_sign(
 
 
 @router.post(
+    "/road-sign-translations",
+    response_model=RoadSignTranslationResponse,
+)
+async def create_road_sign_translation(
+    data: RoadSignTranslationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin", "editor")),
+):
+    road_sign_result = await db.execute(
+        select(RoadSign).where(
+            RoadSign.id == data.road_sign_id
+        )
+    )
+
+    road_sign = road_sign_result.scalar_one_or_none()
+
+    if road_sign is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Road sign not found",
+        )
+    existing_result = await db.execute(
+    select(RoadSignTranslation).where(
+        RoadSignTranslation.road_sign_id == data.road_sign_id,
+        RoadSignTranslation.language == data.language,
+    )
+)
+
+    existing_translation = existing_result.scalar_one_or_none()
+
+    if existing_translation is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Translation for this language already exists",
+        )
+
+    translation = RoadSignTranslation(
+        road_sign_id=data.road_sign_id,
+        language=data.language,
+        title=data.title,
+        description=data.description,
+    )
+
+    db.add(translation)
+
+    await db.commit()
+    await db.refresh(translation)
+
+    return translation
+
+
+@router.get(
+    "/road-sign-translations",
+    response_model=list[RoadSignTranslationResponse],
+)
+async def get_road_sign_translations(
+    road_sign_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin", "editor")),
+):
+    query = select(RoadSignTranslation)
+
+    if road_sign_id is not None:
+        query = query.where(
+            RoadSignTranslation.road_sign_id == road_sign_id
+        )
+
+    result = await db.execute(query)
+
+    return result.scalars().all()
+
+
+@router.get(
+    "/road-sign-translations/{translation_id}",
+    response_model=RoadSignTranslationResponse,
+)
+async def get_road_sign_translation(
+    translation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin", "editor")),
+):
+    result = await db.execute(
+        select(RoadSignTranslation).where(
+            RoadSignTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Road sign translation not found",
+        )
+
+    return translation
+
+
+@router.patch(
+    "/road-sign-translations/{translation_id}",
+    response_model=RoadSignTranslationResponse,
+)
+async def update_road_sign_translation(
+    translation_id: int,
+    data: RoadSignTranslationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin", "editor")),
+):
+    result = await db.execute(
+        select(RoadSignTranslation).where(
+            RoadSignTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Road sign translation not found",
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(translation, field, value)
+
+    await db.commit()
+    await db.refresh(translation)
+
+    return translation
+
+
+@router.delete(
+    "/road-sign-translations/{translation_id}"
+)
+async def delete_road_sign_translation(
+    translation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+):
+    result = await db.execute(
+        select(RoadSignTranslation).where(
+            RoadSignTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Road sign translation not found",
+        )
+
+    await db.delete(translation)
+    await db.commit()
+
+    return {
+        "message": "Road sign translation deleted successfully"
+    }
+
+
+@router.post(
     "/official-samples",
     response_model=OfficialSampleResponse,
 )
@@ -2219,10 +3217,15 @@ async def get_official_samples(
     session: AsyncSession = Depends(get_db),
 ):
     result = await session.execute(
-        select(OfficialSample).order_by(OfficialSample.id)
+        select(OfficialSample)
+        .options(
+            selectinload(OfficialSample.translations)
+        )
     )
 
-    return result.scalars().all()
+    official_samples = result.scalars().all()
+
+    return official_samples
 
 
 
@@ -2270,7 +3273,11 @@ async def get_official_sample(
     session: AsyncSession = Depends(get_db),
 ):
     result = await session.execute(
-        select(OfficialSample).where(
+        select(OfficialSample)
+        .options(
+            selectinload(OfficialSample.translations)
+        )
+        .where(
             OfficialSample.id == official_sample_id
         )
     )
@@ -2284,7 +3291,6 @@ async def get_official_sample(
         )
 
     return official_sample
-
 
 
 @router.delete("/official-samples/{official_sample_id}")
@@ -2312,6 +3318,198 @@ async def delete_official_sample(
 
     return {
         "message": "Official sample deleted successfully"
+    }
+
+
+
+@router.post(
+    "/official-sample-translations",
+    response_model=OfficialSampleTranslationResponse,
+)
+async def create_official_sample_translation(
+    data: OfficialSampleTranslationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin", "editor")),
+):
+    official_sample_result = await db.execute(
+        select(OfficialSample).where(
+            OfficialSample.id == data.official_sample_id
+        )
+    )
+
+    official_sample = official_sample_result.scalar_one_or_none()
+
+    if official_sample is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample not found",
+        )
+    existing_result = await db.execute(
+        select(OfficialSampleTranslation).where(
+            OfficialSampleTranslation.official_sample_id
+            == data.official_sample_id,
+            OfficialSampleTranslation.language
+            == data.language,
+        )
+    )
+
+    existing_translation = existing_result.scalar_one_or_none()
+
+    if existing_translation is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Translation for this language already exists",
+        )
+
+    translation = OfficialSampleTranslation(
+        official_sample_id=data.official_sample_id,
+        language=data.language,
+        title=data.title,
+        description=data.description,
+    )
+
+    db.add(translation)
+
+    await db.commit()
+
+    await db.refresh(translation)
+
+    return translation
+
+
+@router.get(
+    "/official-sample-translations",
+    response_model=list[OfficialSampleTranslationResponse],
+)
+async def get_official_sample_translations(
+    official_sample_id: int | None = None,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    query = select(OfficialSampleTranslation)
+
+    if official_sample_id is not None:
+        query = query.where(
+            OfficialSampleTranslation.official_sample_id
+            == official_sample_id
+        )
+
+    result = await session.execute(query)
+
+    translations = result.scalars().all()
+
+    return translations
+
+
+
+@router.get(
+    "/official-sample-translations/{translation_id}",
+    response_model=OfficialSampleTranslationResponse,
+)
+async def get_official_sample_translation(
+    translation_id: int,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSampleTranslation).where(
+            OfficialSampleTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample translation not found",
+        )
+
+    return translation
+
+
+@router.patch(
+    "/official-sample-translations/{translation_id}",
+    response_model=OfficialSampleTranslationResponse,
+)
+async def update_official_sample_translation(
+    translation_id: int,
+    data: OfficialSampleTranslationUpdate,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSampleTranslation).where(
+            OfficialSampleTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample translation not found",
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "language" in update_data:
+        result = await session.execute(
+            select(OfficialSampleTranslation).where(
+                OfficialSampleTranslation.official_sample_id
+                == translation.official_sample_id,
+                OfficialSampleTranslation.language
+                == update_data["language"],
+                OfficialSampleTranslation.id != translation_id,
+            )
+        )
+
+        existing_translation = result.scalar_one_or_none()
+
+        if existing_translation is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Translation for this language already exists",
+            )
+
+    for field, value in update_data.items():
+        setattr(translation, field, value)
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return translation
+
+
+
+@router.delete(
+    "/official-sample-translations/{translation_id}"
+)
+async def delete_official_sample_translation(
+    translation_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(OfficialSampleTranslation).where(
+            OfficialSampleTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Official sample translation not found",
+        )
+
+    await session.delete(translation)
+    await session.commit()
+
+    return {
+        "message": "Official sample translation deleted successfully"
     }
 
 
@@ -2366,11 +3564,16 @@ async def get_exam_configs(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
-    result = await db.scalars(
-        select(ExamConfig)
+    result = await db.execute(
+    select(ExamConfig)
+    .options(
+        selectinload(ExamConfig.translations)
     )
+)
 
-    return result.all()
+    exam_configs = result.scalars().all()
+
+    return exam_configs
 
 
 
@@ -2380,13 +3583,20 @@ async def get_exam_configs(
 )
 async def get_exam_config(
     exam_config_id: int,
-    db: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role("admin", "editor")),
 ):
-    exam_config = await db.get(
-        ExamConfig,
-        exam_config_id,
+    result = await session.execute(
+        select(ExamConfig)
+        .options(
+            selectinload(ExamConfig.translations)
+        )
+        .where(
+            ExamConfig.id == exam_config_id
+        )
     )
+
+    exam_config = result.scalar_one_or_none()
 
     if exam_config is None:
         raise HTTPException(
@@ -2395,7 +3605,6 @@ async def get_exam_config(
         )
 
     return exam_config
-
 
 
 @router.patch(
@@ -2453,4 +3662,208 @@ async def delete_exam_config(
 
     return {
         "message": "Exam config deleted successfully"
+    }
+
+
+
+@router.post(
+    "/exam-config-translations",
+    response_model=ExamConfigTranslationResponse,
+)
+async def create_exam_config_translation(
+    data: ExamConfigTranslationCreate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(ExamConfig).where(
+            ExamConfig.id == data.exam_config_id
+        )
+    )
+
+    exam_config = result.scalar_one_or_none()
+
+    if exam_config is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config not found",
+        )
+
+    result = await session.execute(
+        select(ExamConfigTranslation).where(
+            ExamConfigTranslation.exam_config_id
+            == data.exam_config_id,
+            ExamConfigTranslation.language
+            == data.language,
+        )
+    )
+
+    existing_translation = result.scalar_one_or_none()
+
+    if existing_translation is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Translation for this language already exists",
+        )
+
+    translation = ExamConfigTranslation(
+        exam_config_id=data.exam_config_id,
+        language=data.language,
+        title=data.title,
+        description=data.description,
+    )
+
+    session.add(translation)
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return translation
+
+
+
+@router.get(
+    "/exam-config-translations",
+    response_model=list[ExamConfigTranslationResponse],
+)
+async def get_exam_config_translations(
+    exam_config_id: int | None = None,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    query = select(ExamConfigTranslation)
+
+    if exam_config_id is not None:
+        query = query.where(
+            ExamConfigTranslation.exam_config_id
+            == exam_config_id
+        )
+
+    result = await session.execute(query)
+
+    return result.scalars().all()
+
+
+@router.get(
+    "/exam-config-translations/{translation_id}",
+    response_model=ExamConfigTranslationResponse,
+)
+async def get_exam_config_translation(
+    translation_id: int,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(ExamConfigTranslation).where(
+            ExamConfigTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config translation not found",
+        )
+
+    return translation
+
+
+
+@router.patch(
+    "/exam-config-translations/{translation_id}",
+    response_model=ExamConfigTranslationResponse,
+)
+async def update_exam_config_translation(
+    translation_id: int,
+    data: ExamConfigTranslationUpdate,
+    current_user: dict = Depends(
+        require_role("admin", "editor")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(ExamConfigTranslation).where(
+            ExamConfigTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config translation not found",
+        )
+
+    update_data = data.model_dump(
+        exclude_unset=True
+    )
+
+    if "language" in update_data:
+        result = await session.execute(
+            select(ExamConfigTranslation).where(
+                ExamConfigTranslation.exam_config_id
+                == translation.exam_config_id,
+                ExamConfigTranslation.language
+                == update_data["language"],
+                ExamConfigTranslation.id != translation_id,
+            )
+        )
+
+        existing_translation = result.scalar_one_or_none()
+
+        if existing_translation is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Translation for this language already exists",
+            )
+
+    for field, value in update_data.items():
+        setattr(translation, field, value)
+
+    await session.commit()
+    await session.refresh(translation)
+
+    return translation
+
+
+
+@router.delete(
+    "/exam-config-translations/{translation_id}"
+)
+async def delete_exam_config_translation(
+    translation_id: int,
+    current_user: dict = Depends(
+        require_role("admin")
+    ),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await session.execute(
+        select(ExamConfigTranslation).where(
+            ExamConfigTranslation.id == translation_id
+        )
+    )
+
+    translation = result.scalar_one_or_none()
+
+    if translation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Exam config translation not found",
+        )
+
+    await session.delete(translation)
+
+    await session.commit()
+
+    return {
+        "message": "Exam config translation deleted successfully"
     }

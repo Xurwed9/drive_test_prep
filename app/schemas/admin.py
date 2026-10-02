@@ -5,6 +5,20 @@ from datetime import datetime
 
 
 
+class AdminLanguageUpdate(BaseModel):
+    language: Literal["en", "ru", "tg", "uz", "kk", "ar"]
+
+
+class LanguageResponse(BaseModel):
+    code: str
+    name: str
+
+
+class AdminLanguagesResponse(BaseModel):
+    current_language: str
+    languages: list[LanguageResponse]
+
+
 class ContentVersionStatusUpdate(BaseModel):
     status: Literal[
         "draft",
@@ -29,9 +43,84 @@ class TranslationStatusUpdate(BaseModel):
     status: str
 
 
+class TopicTranslationCreate(BaseModel):
+    topic_id: int
+    language: Literal[
+        "en",
+        "ru",
+        "tg",
+        "uz",
+        "kk",
+        "ar",
+    ]
+    title: str
+
+
+class TopicTranslationUpdate(BaseModel):
+    title: str
+
+
+class TopicTranslationStatusUpdate(BaseModel):
+    status: Literal[
+        "draft",
+        "translation_completed",
+        "native_review",
+        "approved",
+    ]
+
+
 class TopicCreate(BaseModel):
     content_version_id: int
     title: str
+    translations: list[TopicTranslationCreate] = []
+
+
+class TopicCreate(BaseModel):
+    content_version_id: int
+    title: str
+    translations: list[TopicTranslationCreate] = []
+
+
+
+class LessonTranslationCreate(BaseModel):
+    language: Literal[
+        "en",
+        "ru",
+        "tg",
+        "uz",
+        "kk",
+        "ar",
+    ]
+    title: str
+    description: str | None = None
+
+
+class LessonTranslationCreateDirect(BaseModel):
+    lesson_id: int
+    language: Literal[
+        "en", "ru", "tg", "uz", "kk", "ar"
+    ]
+    title: str
+    description: str | None = None
+
+
+class LessonTranslationUpdate(BaseModel):
+    title: str
+    description: str | None = None
+
+
+class LessonTranslationUpdate(BaseModel):
+    title: str
+    description: str | None = None
+
+
+class LessonTranslationStatusUpdate(BaseModel):
+    status: Literal[
+        "draft",
+        "translation_completed",
+        "native_review",
+        "approved",
+    ]
 
 
 class LessonCreate(BaseModel):
@@ -39,6 +128,12 @@ class LessonCreate(BaseModel):
     title: str
     description: str | None = None
     order: int
+
+    translations: list[LessonTranslationCreate] = []
+
+
+class TranslationText(BaseModel):
+    text: str
 
 
 class QuestionCreate(BaseModel):
@@ -49,6 +144,25 @@ class QuestionCreate(BaseModel):
     question_type: str = "multiple_choice"
     is_official: bool = False
     source_id: int | None = None
+    translations: dict[str, TranslationText] = {}
+
+
+class QuestionOptionTranslationUpdate(BaseModel):
+    text:str
+
+
+class QuestionOptionTranslationStatusUpdate(BaseModel):
+    status: Literal[
+        "draft",
+        "translation_completed",
+        "native_review",
+        "approved",
+    ]
+
+
+class QuestionOptionTranslationCreate(BaseModel):
+    language: Literal["en", "ru", "tg", "uz", "kk", "ar"]
+    text: str
 
 
 class QuestionOptionCreate(BaseModel):
@@ -56,6 +170,7 @@ class QuestionOptionCreate(BaseModel):
     option_id: str
     text: str
     order: int
+    translations: list[QuestionOptionTranslationCreate] = []
 
 
 class TranslationCreate(BaseModel):

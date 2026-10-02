@@ -1,4 +1,33 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+
+class ExamConfigTranslationBase(BaseModel):
+    language: str
+    title: str
+    description: str | None = None
+
+
+class ExamConfigTranslationCreate(
+    ExamConfigTranslationBase
+):
+    exam_config_id: int
+
+
+class ExamConfigTranslationUpdate(BaseModel):
+    language: str | None = None
+    title: str | None = None
+    description: str | None = None
+    review_status: str | None = None
+
+
+class ExamConfigTranslationResponse(
+    ExamConfigTranslationBase
+):
+    id: int
+    exam_config_id: int
+    review_status: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExamConfigCreate(BaseModel):
@@ -26,5 +55,6 @@ class ExamConfigResponse(BaseModel):
     time_limit_minutes: int | None
     max_mistakes: int | None
     is_active: bool
+    translations: list[ExamConfigTranslationResponse] = []
 
     model_config = {"from_attributes": True}

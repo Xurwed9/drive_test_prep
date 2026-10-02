@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.question import Question
     from app.models.topic import Topic
+    from app.models.lesson_translation import LessonTranslation
 
 
 class Lesson(Base):
@@ -35,4 +36,8 @@ class Lesson(Base):
     topic: Mapped["Topic"] = relationship(back_populates="lessons")
     questions: Mapped[list["Question"]] = relationship(
     back_populates="lesson"
-)
+    )
+    translations: Mapped[list["LessonTranslation"]] = relationship(
+    back_populates="lesson",
+    cascade="all, delete-orphan",
+    )

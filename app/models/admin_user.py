@@ -12,3 +12,8 @@ class AdminUser(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="editor")
+    preferred_language: Mapped[str] = mapped_column(
+    String(5),
+    default="en",
+    nullable=False,
+    )

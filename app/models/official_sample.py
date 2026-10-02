@@ -7,6 +7,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.content_version import ContentVersion
     from app.models.source import Source
+    from app.models.official_sample_translation import OfficialSampleTranslation
 
 class OfficialSample(Base):
     __tablename__ = "official_samples"
@@ -41,3 +42,7 @@ class OfficialSample(Base):
     content_version: Mapped["ContentVersion"] = relationship()
 
     source: Mapped["Source | None"] = relationship()
+    translations: Mapped[list["OfficialSampleTranslation"]] = relationship(
+    back_populates="official_sample",
+    cascade="all, delete-orphan",
+    )
