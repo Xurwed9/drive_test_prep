@@ -3578,8 +3578,19 @@ async def create_exam_config(
     await db.commit()
     await db.refresh(exam_config)
 
-    return exam_config
+    result = await db.execute(
+        select(ExamConfig)
+        .options(
+            selectinload(ExamConfig.translations)
+        )
+        .where(
+            ExamConfig.id == exam_config.id
+        )
+    )
 
+    exam_config = result.scalar_one()
+
+    return exam_config
 
 
 @router.get(
