@@ -20,8 +20,6 @@ from app.schemas.package import (
     PackageQuestionTranslation,
 )
 from app.schemas.content import ManifestResponse, ContentUpdateItem
-from app.services.package import (build_package_bytes, calculate_sha256,
-                                  calculate_package_size)
 from app.services.storage import storage
 from app.services.publisher import build_content_package
 
@@ -331,36 +329,16 @@ async def get_content_package(
                 for translation in question.translations:
                     languages.add(translation.language)
 
+
     package = build_content_package(
-    content_version=content_version,
-    state=state,
-    vehicle=vehicle,
-)
-
-    package_data = package.model_dump(mode="json")
-
-    package_bytes = build_package_bytes(package_data)
-
-    package_path = storage.save_package(
-        package_bytes=package_bytes,
-        state_code=state.code,
-        vehicle_code=vehicle.code,
-        version=content_version.version,
+        content_version=content_version,
+        state=state,
+        vehicle=vehicle,
     )
 
-    checksum_sha256, package_size_bytes = storage.get_file_integrity(
-        package_path
-    )
-
-    package_url = storage.get_package_url(
-        state_code=state.code,
-        vehicle_code=vehicle.code,
-        version=content_version.version,
-    )
-
-    package.package_size_bytes = package_size_bytes
-    package.checksum_sha256 = checksum_sha256
-    package.package_url = package_url
+    package.package_size_bytes = content_version.package_size
+    package.checksum_sha256 = content_version.checksum
+    package.package_url = content_version.package_url
 
     return package
 
