@@ -3219,8 +3219,19 @@ async def create_official_sample(
     await session.commit()
     await session.refresh(official_sample)
 
-    return official_sample
+    result = await session.execute(
+        select(OfficialSample)
+        .options(
+            selectinload(OfficialSample.translations)
+        )
+        .where(
+            OfficialSample.id == official_sample.id
+        )
+    )
 
+    official_sample = result.scalar_one()
+
+    return official_sample
 
 
 @router.get(
