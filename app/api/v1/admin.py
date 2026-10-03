@@ -2920,14 +2920,29 @@ async def delete_admin_user(user_id: int,
 
 
 @router.post("/road-signs", response_model=RoadSignResponse)
-async def create_road_sign(data: RoadSignCreate,
-                           current_user: dict = Depends(require_role("admin", "editor")),
-                           session: AsyncSession = Depends(get_db)):
-
+async def create_road_sign(
+    data: RoadSignCreate,
+    current_user: dict = Depends(require_role("admin", "editor")),
+    session: AsyncSession = Depends(get_db),
+):
     road_sign = RoadSign(**data.model_dump())
+
     session.add(road_sign)
     await session.commit()
     await session.refresh(road_sign)
+
+    result = await session.execute(
+        select(RoadSign)
+        .options(
+            selectinload(RoadSign.translations)
+        )
+        .where(
+            RoadSign.id == road_sign.id
+        )
+    )
+
+    road_sign = result.scalar_one()
+
     return road_sign
 
 
