@@ -19,41 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "question_option_translations",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column(
-            "question_option_id",
-            sa.Integer(),
-            nullable=False,
-        ),
-        sa.Column(
-            "language",
-            sa.String(length=5),
-            nullable=False,
-        ),
-        sa.Column(
-            "text",
-            sa.Text(),
-            nullable=False,
-        ),
-        sa.Column(
-            "review_status",
-            sa.String(length=30),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(
-            ["question_option_id"],
-            ["question_options.id"],
-        ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "question_option_id",
-            "language",
-            name="uq_question_option_translation_language",
-        ),
-    )
+    pass
 
 
 def downgrade() -> None:
-    op.drop_table("question_option_translations")
+    pass
